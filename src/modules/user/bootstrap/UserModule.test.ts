@@ -6,6 +6,7 @@ import { DomainEventManager } from "../../../shared/application/DomainEventManag
 import type { UnitOfWork } from "../../../shared/application/UnitOfWork.ts";
 import type { EventPublisherPort } from "../../../shared/ports/EventPublisherPort.ts";
 import { HttpServer } from "../../../shared/infrastructure/http/HttpServer.ts";
+import { GraphqlServer } from "../../../shared/infrastructure/graphql/GraphqlServer.ts";
 
 class FakeUnitOfWork implements UnitOfWork {
   public async begin(): Promise<void> {}
@@ -28,10 +29,14 @@ async function fetchJson(url: string, options?: RequestInit): Promise<{ status: 
 
 describe("UserModule", () => {
   let httpServer: HttpServer;
+  let graphqlServer: GraphqlServer;
 
   afterEach(async () => {
     if (httpServer !== undefined) {
       await httpServer.stop();
+    }
+    if (graphqlServer !== undefined) {
+      await graphqlServer.stop();
     }
   });
 
@@ -85,5 +90,77 @@ describe("UserModule", () => {
     });
 
     assert.equal(duplicateResult.status, 409);
+  });
+
+  it("should register GraphQL resolvers and handle createUser mutation", async () => {
+    graphqlServer = new GraphqlServer();
+    const unitOfWork = new FakeUnitOfWork();
+    const eventManager = new DomainEventManager();
+    const eventPublisher = new FakeEventPublisher();
+    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
+
+    const userModule = new UserModule(applicationService);
+    userModule.registerResolvers(graphqlServer);
+
+    const port = await graphqlServer.start(TEST_PORT);
+
+    const mutation = `mutation {
+      createUser(input: { name: "John Doe", email: "john@example.com" }) {
+        id
+        name
+        email
+      }
+    }`;
+
+    const result = await fetchJson("http://localhost:" + port + "/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: mutation }),
+    });
+
+    assert.equal(result.status, 200);
+    const body = result.body as { data: { createUser: { id: string; name: string; email: string } } };
+    assert.ok(body.data.createUser.id.length > 0);
+    assert.equal(body.data.createUser.name, "John Doe");
+    assert.equal(body.data.createUser.email, "john@example.com");
+  });
+
+  it("should share the same repository between REST and GraphQL adapters", async () => {
+    httpServer = new HttpServer();
+    graphqlServer = new GraphqlServer();
+    const unitOfWork = new FakeUnitOfWork();
+    const eventManager = new DomainEventManager();
+    const eventPublisher = new FakeEventPublisher();
+    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
+
+    const userModule = new UserModule(applicationService);
+    userModule.registerRoutes(httpServer);
+    userModule.registerResolvers(graphqlServer);
+
+    const httpPort = await httpServer.start(TEST_PORT);
+    const graphqlPort = await graphqlServer.start(TEST_PORT);
+
+    await fetchJson("http://localhost:" + httpPort + "/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "John", email: "john@example.com" }),
+    });
+
+    const mutation = `mutation {
+      createUser(input: { name: "Jane", email: "john@example.com" }) {
+        id
+      }
+    }`;
+
+    const graphqlResult = await fetchJson("http://localhost:" + graphqlPort + "/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: mutation }),
+    });
+
+    assert.equal(graphqlResult.status, 200);
+    const body = graphqlResult.body as { errors: Array<{ message: string }> };
+    assert.ok(body.errors.length > 0);
+    assert.ok(body.errors[0]!.message.includes("already exists"));
   });
 });

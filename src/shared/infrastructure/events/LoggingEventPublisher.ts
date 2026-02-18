@@ -1,6 +1,6 @@
-import type { EventPublisherPort } from "../ports/EventPublisherPort.ts";
-import type { DomainEvent } from "../domain/events/DomainEvent.ts";
-import type { LoggerPort } from "../ports/LoggerPort.ts";
+import type { EventPublisherPort } from "../../ports/EventPublisherPort.ts";
+import type { DomainEvent } from "../../domain/events/DomainEvent.ts";
+import type { LoggerPort } from "../../ports/LoggerPort.ts";
 
 export class LoggingEventPublisher implements EventPublisherPort {
   private readonly logger: LoggerPort;

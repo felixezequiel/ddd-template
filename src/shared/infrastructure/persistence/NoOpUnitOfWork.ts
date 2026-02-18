@@ -1,4 +1,4 @@
-import type { UnitOfWork } from "../application/UnitOfWork.ts";
+import type { UnitOfWork } from "../../application/UnitOfWork.ts";
 
 export class NoOpUnitOfWork implements UnitOfWork {
   public async begin(): Promise<void> {}

@@ -7,7 +7,8 @@
     "start": "node --import @swc-node/register/esm-register src/main.ts",
     "test": "node --import @swc-node/register/esm-register --test src/**/*.test.ts",
     "test:watch": "node --import @swc-node/register/esm-register --test --watch src/**/*.test.ts",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "bench": "node --import @swc-node/register/esm-register scripts/bench.ts"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +17,7 @@
     "@swc-node/register": "^1.11.1",
     "@swc/core": "^1.15.11",
     "@types/node": "^25.2.3",
+    "tinybench": "^6.0.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {

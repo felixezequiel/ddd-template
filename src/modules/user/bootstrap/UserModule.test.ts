@@ -5,6 +5,8 @@ import { ApplicationService } from "../../../shared/application/ApplicationServi
 import { DomainEventManager } from "../../../shared/application/DomainEventManager.ts";
 import type { UnitOfWork } from "../../../shared/application/UnitOfWork.ts";
 import type { EventPublisherPort } from "../../../shared/ports/EventPublisherPort.ts";
+import type { LoggerPort } from "../../../shared/ports/LoggerPort.ts";
+import { EventEmitterEventBus } from "../../../shared/infrastructure/events/EventEmitterEventBus.ts";
 import { HttpServer } from "../../../shared/infrastructure/http/HttpServer.ts";
 import { GraphqlServer } from "../../../shared/infrastructure/graphql/GraphqlServer.ts";
 
@@ -17,6 +19,17 @@ class FakeUnitOfWork implements UnitOfWork {
 class FakeEventPublisher implements EventPublisherPort {
   public async publish(): Promise<void> {}
   public async publishAll(): Promise<void> {}
+}
+
+class FakeLogger implements LoggerPort {
+  public messages: Array<{ level: string; message: string; context?: Record<string, unknown> | undefined }> = [];
+
+  public info(message: string, context?: Record<string, unknown>): void {
+    this.messages.push({ level: "info", message, context });
+  }
+  public warn(): void {}
+  public error(): void {}
+  public debug(): void {}
 }
 
 const TEST_PORT = 0;
@@ -123,6 +136,33 @@ describe("UserModule", () => {
     assert.ok(body.data.createUser.id.length > 0);
     assert.equal(body.data.createUser.name, "John Doe");
     assert.equal(body.data.createUser.email, "john@example.com");
+  });
+
+  it("should register event handlers and react to UserCreated event", async () => {
+    httpServer = new HttpServer();
+    const unitOfWork = new FakeUnitOfWork();
+    const eventManager = new DomainEventManager();
+    const eventBus = new EventEmitterEventBus();
+    const fakeLogger = new FakeLogger();
+    const applicationService = new ApplicationService(unitOfWork, eventManager, eventBus);
+
+    const userModule = new UserModule(applicationService);
+    userModule.registerEventHandlers(eventBus, fakeLogger);
+    userModule.registerRoutes(httpServer);
+
+    const port = await httpServer.start(TEST_PORT);
+
+    await fetchJson("http://localhost:" + port + "/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "John Doe", email: "john@example.com" }),
+    });
+
+    const welcomeEmailLog = fakeLogger.messages.find(
+      (log) => log.message === "Sending welcome email",
+    );
+    assert.ok(welcomeEmailLog !== undefined);
+    assert.equal((welcomeEmailLog.context as { email: string }).email, "john@example.com");
   });
 
   it("should share the same repository between REST and GraphQL adapters", async () => {

@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm test                    # Run all tests (node:test via SWC)
 npm run test:watch          # Run tests in watch mode
 npm run typecheck           # Type check only (tsc, no emit)
-npm start                   # Run src/index.ts
+npm start                   # Start HTTP server (monolith composition root)
 
 # Run a single test file
 node --import @swc-node/register/esm-register --test src/shared/domain/valueObjects/ValueObject.test.ts
@@ -33,8 +33,10 @@ src/
 ├── modules/<context>/   # Bounded contexts
 │   ├── domain/          # Identifiers, ValueObjects, Aggregates, Events
 │   ├── application/     # Commands, Ports (primary/secondary), UseCases
-│   └── infrastructure/  # Adapters (persistence, etc.)
+│   ├── infrastructure/  # Adapters (persistence, http controllers, etc.)
+│   └── <Context>Module.ts  # Vertical slice bootstrap (wires deps, registers routes)
 │
+├── main.ts              # Composition root (monolith entry point)
 └── context/docs/        # Architecture Decision Records (ADRs)
 ```
 

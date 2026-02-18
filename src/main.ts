@@ -3,7 +3,7 @@ import { GraphqlServer } from "./shared/infrastructure/graphql/GraphqlServer.ts"
 import { ApplicationService } from "./shared/application/ApplicationService.ts";
 import { DomainEventManager } from "./shared/application/DomainEventManager.ts";
 import { NoOpUnitOfWork } from "./shared/infrastructure/persistence/NoOpUnitOfWork.ts";
-import { LoggingEventPublisher } from "./shared/infrastructure/events/LoggingEventPublisher.ts";
+import { EventEmitterEventBus } from "./shared/infrastructure/events/EventEmitterEventBus.ts";
 import { ConsoleLogger } from "./shared/infrastructure/logging/ConsoleLogger.ts";
 import { UserModule } from "./modules/user/bootstrap/UserModule.ts";
 
@@ -32,8 +32,8 @@ async function main(): Promise<void> {
   // --- Shared infrastructure (monolith provides these) ---
   const unitOfWork = new NoOpUnitOfWork();
   const domainEventManager = new DomainEventManager();
-  const eventPublisher = new LoggingEventPublisher(logger);
-  const applicationService = new ApplicationService(unitOfWork, domainEventManager, eventPublisher);
+  const eventBus = new EventEmitterEventBus();
+  const applicationService = new ApplicationService(unitOfWork, domainEventManager, eventBus);
 
   // --- Servers ---
   const httpServer = new HttpServer();
@@ -43,6 +43,7 @@ async function main(): Promise<void> {
   // Each module wires its own dependencies and registers adapters.
   // To add a new bounded context, create a new module and register it here.
   const userModule = new UserModule(applicationService);
+  userModule.registerEventHandlers(eventBus, logger);
   userModule.registerRoutes(httpServer);
   userModule.registerResolvers(graphqlServer);
 

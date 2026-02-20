@@ -1,26 +1,17 @@
-import { describe, it } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { ApplicationService } from "../../../shared/application/ApplicationService.ts";
 import { DomainEventManager } from "../../../shared/application/DomainEventManager.ts";
-import type { UnitOfWork } from "../../../shared/application/UnitOfWork.ts";
 import type { EventPublisherPort } from "../../../shared/ports/EventPublisherPort.ts";
 import type { DomainEvent } from "../../../shared/domain/events/DomainEvent.ts";
+import { AggregateRoot } from "../../../shared/domain/aggregates/AggregateRoot.ts";
+import { AggregateTracker } from "../../../shared/infrastructure/persistence/AggregateTracker.ts";
+import { InMemoryUnitOfWork } from "../../../shared/infrastructure/persistence/adapters/InMemoryUnitOfWork.ts";
 import { CreateUserUseCase } from "../application/usecase/CreateUserUseCase.ts";
 import { CreateUserCommand } from "../application/command/CreateUserCommand.ts";
-import { InMemoryUserRepository } from "../infrastructure/persistence/InMemoryUserRepository.ts";
+import { InMemoryUserRepository } from "../infrastructure/persistence/in-memory/InMemoryUserRepository.ts";
+import { User } from "../domain/aggregates/User.ts";
 import { UserId } from "../domain/identifiers/UserId.ts";
-
-class FakeUnitOfWork implements UnitOfWork {
-  public committed = false;
-
-  public async begin(): Promise<void> {}
-
-  public async commit(): Promise<void> {
-    this.committed = true;
-  }
-
-  public async rollback(): Promise<void> {}
-}
 
 class FakeEventPublisher implements EventPublisherPort {
   public publishedEvents: Array<DomainEvent> = [];
@@ -36,10 +27,27 @@ class FakeEventPublisher implements EventPublisherPort {
   }
 }
 
+function createUserRepositoryAdapter(repository: InMemoryUserRepository) {
+  return {
+    supports: (aggregate: AggregateRoot<import("../../../shared/domain/identifiers/Identifier.ts").Identifier, object>) => aggregate instanceof User,
+    save: (aggregate: AggregateRoot<import("../../../shared/domain/identifiers/Identifier.ts").Identifier, object>) => repository.save(aggregate as User),
+  };
+}
+
 describe("CreateUser integration", () => {
+  beforeEach(() => {
+    AggregateRoot.setOnTrack((aggregate) => {
+      AggregateTracker.track(aggregate);
+    });
+  });
+
+  afterEach(() => {
+    AggregateRoot.setOnTrack(null);
+  });
+
   it("should execute the full cycle: command -> useCase -> aggregate -> events -> publish", async () => {
     const userRepository = new InMemoryUserRepository();
-    const unitOfWork = new FakeUnitOfWork();
+    const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
     const dispatchedEvents: Array<DomainEvent> = [];
@@ -59,8 +67,8 @@ describe("CreateUser integration", () => {
     const user = await applicationService.execute(useCase, command);
 
     assert.equal(user.id.value, "user-1");
-    assert.equal(user.props.name, "John Doe");
-    assert.equal(user.props.email.props.value, "john@example.com");
+    assert.equal(user.name, "John Doe");
+    assert.equal(user.email.value, "john@example.com");
 
     const persistedUser = await userRepository.findById(new UserId("user-1"));
     assert.ok(persistedUser !== null);
@@ -70,13 +78,11 @@ describe("CreateUser integration", () => {
 
     assert.equal(eventPublisher.publishedEvents.length, 1);
     assert.equal(eventPublisher.publishedEvents[0]!.eventName, "UserCreated");
-
-    assert.ok(unitOfWork.committed);
   });
 
   it("should rollback when creating a user with a duplicate email", async () => {
     const userRepository = new InMemoryUserRepository();
-    const unitOfWork = new FakeUnitOfWork();
+    const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
 

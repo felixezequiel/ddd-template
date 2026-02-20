@@ -1,22 +1,19 @@
-import { describe, it } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { ApplicationService } from "../../../shared/application/ApplicationService.ts";
 import { DomainEventManager } from "../../../shared/application/DomainEventManager.ts";
-import type { UnitOfWork } from "../../../shared/application/UnitOfWork.ts";
 import { EventEmitterEventBus } from "../../../shared/infrastructure/events/EventEmitterEventBus.ts";
+import { AggregateRoot } from "../../../shared/domain/aggregates/AggregateRoot.ts";
+import { AggregateTracker } from "../../../shared/infrastructure/persistence/AggregateTracker.ts";
+import { InMemoryUnitOfWork } from "../../../shared/infrastructure/persistence/adapters/InMemoryUnitOfWork.ts";
 import { CreateUserUseCase } from "../application/usecase/CreateUserUseCase.ts";
 import { SendWelcomeEmailUseCase } from "../application/usecase/SendWelcomeEmailUseCase.ts";
 import { CreateUserCommand } from "../application/command/CreateUserCommand.ts";
 import { SendWelcomeEmailCommand } from "../application/command/SendWelcomeEmailCommand.ts";
-import { InMemoryUserRepository } from "../infrastructure/persistence/InMemoryUserRepository.ts";
+import { InMemoryUserRepository } from "../infrastructure/persistence/in-memory/InMemoryUserRepository.ts";
+import { User } from "../domain/aggregates/User.ts";
 import type { EmailNotificationPort } from "../application/port/secondary/EmailNotificationPort.ts";
 import type { UserCreatedEvent } from "../domain/events/UserCreatedEvent.ts";
-
-class FakeUnitOfWork implements UnitOfWork {
-  public async begin(): Promise<void> {}
-  public async commit(): Promise<void> {}
-  public async rollback(): Promise<void> {}
-}
 
 class FakeEmailNotification implements EmailNotificationPort {
   public sentEmails: Array<{ email: string; userId: string }> = [];
@@ -26,15 +23,32 @@ class FakeEmailNotification implements EmailNotificationPort {
   }
 }
 
+function createUserRepositoryAdapter(repository: InMemoryUserRepository) {
+  return {
+    supports: (aggregate: AggregateRoot<import("../../../shared/domain/identifiers/Identifier.ts").Identifier, object>) => aggregate instanceof User,
+    save: (aggregate: AggregateRoot<import("../../../shared/domain/identifiers/Identifier.ts").Identifier, object>) => repository.save(aggregate as User),
+  };
+}
+
 describe("User domain events integration", () => {
+  beforeEach(() => {
+    AggregateRoot.setOnTrack((aggregate) => {
+      AggregateTracker.track(aggregate);
+    });
+  });
+
+  afterEach(() => {
+    AggregateRoot.setOnTrack(null);
+  });
+
   it("should send a welcome email when a user is created", async () => {
-    const unitOfWork = new FakeUnitOfWork();
+    const userRepository = new InMemoryUserRepository();
+    const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const domainEventManager = new DomainEventManager();
     const eventBus = new EventEmitterEventBus();
 
     const applicationService = new ApplicationService(unitOfWork, domainEventManager, eventBus);
 
-    const userRepository = new InMemoryUserRepository();
     const createUserUseCase = new CreateUserUseCase(userRepository);
 
     const fakeEmailNotification = new FakeEmailNotification();
@@ -58,13 +72,13 @@ describe("User domain events integration", () => {
   });
 
   it("should not send a welcome email when user creation fails", async () => {
-    const unitOfWork = new FakeUnitOfWork();
+    const userRepository = new InMemoryUserRepository();
+    const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const domainEventManager = new DomainEventManager();
     const eventBus = new EventEmitterEventBus();
 
     const applicationService = new ApplicationService(unitOfWork, domainEventManager, eventBus);
 
-    const userRepository = new InMemoryUserRepository();
     const createUserUseCase = new CreateUserUseCase(userRepository);
 
     const fakeEmailNotification = new FakeEmailNotification();

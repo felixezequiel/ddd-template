@@ -1,11 +1,18 @@
+import { MikroORM } from "@mikro-orm/sqlite";
 import { HttpServer } from "./shared/infrastructure/http/HttpServer.ts";
 import { GraphqlServer } from "./shared/infrastructure/graphql/GraphqlServer.ts";
 import { ApplicationService } from "./shared/application/ApplicationService.ts";
 import { DomainEventManager } from "./shared/application/DomainEventManager.ts";
-import { NoOpUnitOfWork } from "./shared/infrastructure/persistence/NoOpUnitOfWork.ts";
 import { EventEmitterEventBus } from "./shared/infrastructure/events/EventEmitterEventBus.ts";
 import { ConsoleLogger } from "./shared/infrastructure/logging/ConsoleLogger.ts";
+import { AggregateRoot } from "./shared/domain/aggregates/AggregateRoot.ts";
+import { AggregateTracker } from "./shared/infrastructure/persistence/AggregateTracker.ts";
+import { MikroOrmEntityManagerProvider } from "./shared/infrastructure/persistence/adapters/EntityManagerProvider.ts";
+import { MikroOrmUnitOfWork } from "./shared/infrastructure/persistence/adapters/MikroOrmUnitOfWork.ts";
+import { UserAggregatePersister } from "./modules/user/infrastructure/persistence/mikro-orm/repositories/user/UserAggregatePersister.ts";
+import { MikroOrmUserRepository } from "./modules/user/infrastructure/persistence/mikro-orm/repositories/user/MikroOrmUserRepository.ts";
 import { UserModule } from "./modules/user/bootstrap/UserModule.ts";
+import mikroOrmConfig from "./mikro-orm.config.ts";
 
 /**
  * Composition Root — Monolith entry point.
@@ -29,8 +36,21 @@ const GRAPHQL_PORT = 4000;
 async function main(): Promise<void> {
   const logger = new ConsoleLogger();
 
+  // --- MikroORM initialization ---
+  const orm = await MikroORM.init(mikroOrmConfig);
+  const migrator = orm.getMigrator();
+  await migrator.up();
+  logger.info("Database migrations applied");
+
+  // --- Auto-tracking: domain aggregates register themselves ---
+  AggregateRoot.setOnTrack((aggregate) => {
+    AggregateTracker.track(aggregate);
+  });
+
   // --- Shared infrastructure (monolith provides these) ---
-  const unitOfWork = new NoOpUnitOfWork();
+  const entityManagerProvider = new MikroOrmEntityManagerProvider(orm.em);
+  const userAggregatePersister = new UserAggregatePersister();
+  const unitOfWork = new MikroOrmUnitOfWork(entityManagerProvider, [userAggregatePersister]);
   const domainEventManager = new DomainEventManager();
   const eventBus = new EventEmitterEventBus();
   const applicationService = new ApplicationService(unitOfWork, domainEventManager, eventBus);
@@ -42,19 +62,16 @@ async function main(): Promise<void> {
   // --- Module registration (vertical slices) ---
   // Each module wires its own dependencies and registers adapters.
   // To add a new bounded context, create a new module and register it here.
-  const userModule = new UserModule(applicationService);
+  const userRepository = new MikroOrmUserRepository(entityManagerProvider);
+  const userModule = new UserModule(applicationService, userRepository);
   userModule.registerEventHandlers(eventBus, logger);
   userModule.registerRoutes(httpServer);
   userModule.registerResolvers(graphqlServer);
 
   // Future modules:
-  // const orderModule = new OrderModule(applicationService);
+  // const orderModule = new OrderModule(applicationService, orderRepository);
   // orderModule.registerRoutes(httpServer);
   // orderModule.registerResolvers(graphqlServer);
-
-  // Future adapters (same modules, different entry points):
-  // userModule.registerConsumers(messageBroker);
-  // userModule.registerCli(cliRouter);
 
   // --- Start ---
   const restPort = await httpServer.start(REST_PORT);

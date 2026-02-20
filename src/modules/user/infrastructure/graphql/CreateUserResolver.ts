@@ -47,8 +47,8 @@ export class CreateUserResolver {
 
     return {
       id: user.id.value,
-      name: user.props.name,
-      email: user.props.email.props.value,
+      name: user.name,
+      email: user.email.value,
     };
   }
 }

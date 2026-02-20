@@ -8,12 +8,21 @@
     "test": "node --import @swc-node/register/esm-register --test src/**/*.test.ts",
     "test:watch": "node --import @swc-node/register/esm-register --test --watch src/**/*.test.ts",
     "typecheck": "tsc",
-    "bench": "node --import @swc-node/register/esm-register scripts/bench.ts"
+    "bench": "node --import @swc-node/register/esm-register scripts/bench.ts",
+    "migration:create": "node --import @swc-node/register/esm-register node_modules/.bin/mikro-orm migration:create",
+    "migration:up": "node --import @swc-node/register/esm-register node_modules/.bin/mikro-orm migration:up"
+  },
+  "mikro-orm": {
+    "useTsNode": false,
+    "configPaths": [
+      "./src/mikro-orm.config.ts"
+    ]
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@mikro-orm/cli": "^6.6.7",
     "@swc-node/register": "^1.11.1",
     "@swc/core": "^1.15.11",
     "@types/node": "^25.2.3",
@@ -21,6 +30,9 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@mikro-orm/core": "^6.6.7",
+    "@mikro-orm/migrations": "^6.6.7",
+    "@mikro-orm/sqlite": "^6.6.7",
     "graphql": "^16.12.0"
   }
 }

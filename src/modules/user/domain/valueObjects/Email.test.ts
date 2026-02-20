@@ -6,7 +6,7 @@ describe("Email", () => {
   it("should create an email with a valid address", () => {
     const email = new Email("user@example.com");
 
-    assert.equal(email.props.value, "user@example.com");
+    assert.equal(email.value, "user@example.com");
   });
 
   it("should throw when email has no @ symbol", () => {

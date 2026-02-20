@@ -7,7 +7,15 @@ interface MoneyProps {
   readonly currency: string;
 }
 
-class Money extends ValueObject<MoneyProps> {}
+class Money extends ValueObject<MoneyProps> {
+  public get amount(): number {
+    return this.props.amount;
+  }
+
+  public get currency(): string {
+    return this.props.currency;
+  }
+}
 
 interface AddressProps {
   readonly street: string;
@@ -20,8 +28,8 @@ describe("ValueObject", () => {
   it("should store the provided properties", () => {
     const money = new Money({ amount: 100, currency: "BRL" });
 
-    assert.equal(money.props.amount, 100);
-    assert.equal(money.props.currency, "BRL");
+    assert.equal(money.amount, 100);
+    assert.equal(money.currency, "BRL");
   });
 
   it("should be equal to another value object with the same properties", () => {
@@ -49,7 +57,7 @@ describe("ValueObject", () => {
     const money = new Money({ amount: 100, currency: "BRL" });
 
     assert.throws(() => {
-      (money as { props: MoneyProps }).props = { amount: 200, currency: "BRL" };
+      (money as unknown as { props: MoneyProps }).props = { amount: 200, currency: "BRL" };
     });
   });
 });

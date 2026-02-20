@@ -1,6 +1,6 @@
-import type { UserRepositoryPort } from "../../application/port/secondary/UserRepositoryPort.ts";
-import type { UserId } from "../../domain/identifiers/UserId.ts";
-import type { User } from "../../domain/aggregates/User.ts";
+import type { UserRepositoryPort } from "../../../application/port/secondary/UserRepositoryPort.ts";
+import type { UserId } from "../../../domain/identifiers/UserId.ts";
+import type { User } from "../../../domain/aggregates/User.ts";
 
 export class InMemoryUserRepository implements UserRepositoryPort {
   private users: Map<string, User> = new Map();
@@ -16,7 +16,7 @@ export class InMemoryUserRepository implements UserRepositoryPort {
 
   public async findByEmail(email: string): Promise<User | null> {
     for (const user of this.users.values()) {
-      if (user.props.email.props.value === email) {
+      if (user.email.value === email) {
         return user;
       }
     }

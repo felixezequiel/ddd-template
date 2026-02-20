@@ -1,19 +1,24 @@
-import { describe, it, afterEach } from "node:test";
+import { describe, it, afterEach, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { UserModule } from "./UserModule.ts";
 import { ApplicationService } from "../../../shared/application/ApplicationService.ts";
 import { DomainEventManager } from "../../../shared/application/DomainEventManager.ts";
-import type { UnitOfWork } from "../../../shared/application/UnitOfWork.ts";
 import type { EventPublisherPort } from "../../../shared/ports/EventPublisherPort.ts";
 import type { LoggerPort } from "../../../shared/ports/LoggerPort.ts";
 import { EventEmitterEventBus } from "../../../shared/infrastructure/events/EventEmitterEventBus.ts";
 import { HttpServer } from "../../../shared/infrastructure/http/HttpServer.ts";
 import { GraphqlServer } from "../../../shared/infrastructure/graphql/GraphqlServer.ts";
+import { InMemoryUserRepository } from "../infrastructure/persistence/in-memory/InMemoryUserRepository.ts";
+import { InMemoryUnitOfWork } from "../../../shared/infrastructure/persistence/adapters/InMemoryUnitOfWork.ts";
+import { AggregateRoot } from "../../../shared/domain/aggregates/AggregateRoot.ts";
+import { AggregateTracker } from "../../../shared/infrastructure/persistence/AggregateTracker.ts";
+import { User } from "../domain/aggregates/User.ts";
 
-class FakeUnitOfWork implements UnitOfWork {
-  public async begin(): Promise<void> {}
-  public async commit(): Promise<void> {}
-  public async rollback(): Promise<void> {}
+function createUserRepositoryAdapter(repository: InMemoryUserRepository) {
+  return {
+    supports: (aggregate: AggregateRoot<import("../../../shared/domain/identifiers/Identifier.ts").Identifier, object>) => aggregate instanceof User,
+    save: (aggregate: AggregateRoot<import("../../../shared/domain/identifiers/Identifier.ts").Identifier, object>) => repository.save(aggregate as User),
+  };
 }
 
 class FakeEventPublisher implements EventPublisherPort {
@@ -44,7 +49,14 @@ describe("UserModule", () => {
   let httpServer: HttpServer;
   let graphqlServer: GraphqlServer;
 
+  beforeEach(() => {
+    AggregateRoot.setOnTrack((aggregate) => {
+      AggregateTracker.track(aggregate);
+    });
+  });
+
   afterEach(async () => {
+    AggregateRoot.setOnTrack(null);
     if (httpServer !== undefined) {
       await httpServer.stop();
     }
@@ -55,12 +67,13 @@ describe("UserModule", () => {
 
   it("should register routes and handle POST /users end-to-end", async () => {
     httpServer = new HttpServer();
-    const unitOfWork = new FakeUnitOfWork();
+    const userRepository = new InMemoryUserRepository();
+    const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
     const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
 
-    const userModule = new UserModule(applicationService);
+    const userModule = new UserModule(applicationService, userRepository);
     userModule.registerRoutes(httpServer);
 
     const port = await httpServer.start(TEST_PORT);
@@ -80,12 +93,13 @@ describe("UserModule", () => {
 
   it("should be self-contained with its own repository instance", async () => {
     httpServer = new HttpServer();
-    const unitOfWork = new FakeUnitOfWork();
+    const userRepository = new InMemoryUserRepository();
+    const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
     const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
 
-    const userModule = new UserModule(applicationService);
+    const userModule = new UserModule(applicationService, userRepository);
     userModule.registerRoutes(httpServer);
 
     const port = await httpServer.start(TEST_PORT);
@@ -107,12 +121,13 @@ describe("UserModule", () => {
 
   it("should register GraphQL resolvers and handle createUser mutation", async () => {
     graphqlServer = new GraphqlServer();
-    const unitOfWork = new FakeUnitOfWork();
+    const userRepository = new InMemoryUserRepository();
+    const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
     const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
 
-    const userModule = new UserModule(applicationService);
+    const userModule = new UserModule(applicationService, userRepository);
     userModule.registerResolvers(graphqlServer);
 
     const port = await graphqlServer.start(TEST_PORT);
@@ -140,13 +155,14 @@ describe("UserModule", () => {
 
   it("should register event handlers and react to UserCreated event", async () => {
     httpServer = new HttpServer();
-    const unitOfWork = new FakeUnitOfWork();
+    const userRepository = new InMemoryUserRepository();
+    const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventBus = new EventEmitterEventBus();
     const fakeLogger = new FakeLogger();
     const applicationService = new ApplicationService(unitOfWork, eventManager, eventBus);
 
-    const userModule = new UserModule(applicationService);
+    const userModule = new UserModule(applicationService, userRepository);
     userModule.registerEventHandlers(eventBus, fakeLogger);
     userModule.registerRoutes(httpServer);
 
@@ -165,15 +181,83 @@ describe("UserModule", () => {
     assert.equal((welcomeEmailLog.context as { email: string }).email, "john@example.com");
   });
 
-  it("should share the same repository between REST and GraphQL adapters", async () => {
+  it("should handle GET /users/:userId and return user data", async () => {
     httpServer = new HttpServer();
-    graphqlServer = new GraphqlServer();
-    const unitOfWork = new FakeUnitOfWork();
+    const userRepository = new InMemoryUserRepository();
+    const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
     const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
 
-    const userModule = new UserModule(applicationService);
+    const userModule = new UserModule(applicationService, userRepository);
+    userModule.registerRoutes(httpServer);
+
+    const port = await httpServer.start(TEST_PORT);
+
+    const createResult = await fetchJson("http://localhost:" + port + "/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "John Doe", email: "john@example.com" }),
+    });
+
+    const userId = (createResult.body as { id: string }).id;
+
+    const getResult = await fetchJson("http://localhost:" + port + "/users/" + userId, {
+      method: "GET",
+    });
+
+    assert.equal(getResult.status, 200);
+    const body = getResult.body as { id: string; name: string; email: string; addresses: Array<unknown> };
+    assert.equal(body.id, userId);
+    assert.equal(body.name, "John Doe");
+    assert.equal(body.email, "john@example.com");
+    assert.equal(body.addresses.length, 0);
+  });
+
+  it("should handle POST /users/:userId/addresses and add an address", async () => {
+    httpServer = new HttpServer();
+    const userRepository = new InMemoryUserRepository();
+    const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
+    const eventManager = new DomainEventManager();
+    const eventPublisher = new FakeEventPublisher();
+    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
+
+    const userModule = new UserModule(applicationService, userRepository);
+    userModule.registerRoutes(httpServer);
+
+    const port = await httpServer.start(TEST_PORT);
+
+    const createResult = await fetchJson("http://localhost:" + port + "/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "John Doe", email: "john@example.com" }),
+    });
+
+    const userId = (createResult.body as { id: string }).id;
+
+    const addressResult = await fetchJson("http://localhost:" + port + "/users/" + userId + "/addresses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ street: "Rua A", number: "123", city: "Sao Paulo", state: "SP", zipCode: "01000-000" }),
+    });
+
+    assert.equal(addressResult.status, 201);
+    const body = addressResult.body as { userId: string; addressId: string; street: string };
+    assert.equal(body.userId, userId);
+    assert.ok(body.addressId.length > 0);
+    assert.equal(body.street, "Rua A");
+  });
+
+  it("should share the same repository between REST and GraphQL adapters", async () => {
+    httpServer = new HttpServer();
+    graphqlServer = new GraphqlServer();
+    const userRepository = new InMemoryUserRepository();
+    const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
+    const eventManager = new DomainEventManager();
+    const eventPublisher = new FakeEventPublisher();
+    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
+
+    const userModule = new UserModule(applicationService, userRepository);
     userModule.registerRoutes(httpServer);
     userModule.registerResolvers(graphqlServer);
 

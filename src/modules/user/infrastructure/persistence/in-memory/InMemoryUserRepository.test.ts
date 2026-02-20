@@ -1,9 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { InMemoryUserRepository } from "./InMemoryUserRepository.ts";
-import { User } from "../../domain/aggregates/User.ts";
-import { UserId } from "../../domain/identifiers/UserId.ts";
-import { Email } from "../../domain/valueObjects/Email.ts";
+import { User } from "../../../domain/aggregates/User.ts";
+import { UserId } from "../../../domain/identifiers/UserId.ts";
+import { Email } from "../../../domain/valueObjects/Email.ts";
 
 describe("InMemoryUserRepository", () => {
   it("should save and find a user by id", async () => {
@@ -33,7 +33,7 @@ describe("InMemoryUserRepository", () => {
     const found = await repository.findByEmail("john@test.com");
 
     assert.ok(found !== null);
-    assert.equal(found!.props.name, "John");
+    assert.equal(found!.name, "John");
   });
 
   it("should return null when user is not found by email", async () => {
@@ -68,6 +68,6 @@ describe("InMemoryUserRepository", () => {
 
     const found = await repository.findById(userId);
     assert.ok(found !== null);
-    assert.equal(found!.props.name, "John Updated");
+    assert.equal(found!.name, "John Updated");
   });
 });

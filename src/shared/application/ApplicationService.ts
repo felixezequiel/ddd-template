@@ -1,7 +1,7 @@
 import type { DomainEvent } from "../domain/events/DomainEvent.ts";
 import type { AggregateRoot } from "../domain/aggregates/AggregateRoot.ts";
 import type { Identifier } from "../domain/identifiers/Identifier.ts";
-import type { UseCase, UseCaseResult } from "./UseCase.ts";
+import type { UseCase } from "./UseCase.ts";
 import type { UnitOfWork } from "./UnitOfWork.ts";
 import type { DomainEventManager } from "./DomainEventManager.ts";
 import type { EventPublisherPort } from "../ports/EventPublisherPort.ts";
@@ -28,9 +28,10 @@ export class ApplicationService {
     await this.unitOfWork.begin();
 
     try {
-      const useCaseResult: UseCaseResult<Result> = await useCase.execute(command);
+      const result: Result = await useCase.execute(command);
 
-      const allEvents = this.drainEventsFromAggregates(useCaseResult.aggregates);
+      const trackedAggregates = this.unitOfWork.getTrackedAggregates();
+      const allEvents = this.drainEventsFromAggregates(trackedAggregates);
 
       await this.domainEventManager.dispatchAll(allEvents);
 
@@ -38,7 +39,7 @@ export class ApplicationService {
 
       await this.unitOfWork.commit();
 
-      return useCaseResult.result;
+      return result;
     } catch (error) {
       await this.unitOfWork.rollback();
       throw error;

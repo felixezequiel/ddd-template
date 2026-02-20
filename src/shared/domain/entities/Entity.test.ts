@@ -10,7 +10,15 @@ interface ProductProps {
   readonly price: number;
 }
 
-class Product extends Entity<ProductId, ProductProps> {}
+class Product extends Entity<ProductId, ProductProps> {
+  public get name(): string {
+    return this.props.name;
+  }
+
+  public get price(): number {
+    return this.props.price;
+  }
+}
 
 describe("Entity", () => {
   it("should store id and properties", () => {
@@ -18,8 +26,8 @@ describe("Entity", () => {
     const product = new Product(productId, { name: "Widget", price: 10 });
 
     assert.equal(product.id.value, "prod-1");
-    assert.equal(product.props.name, "Widget");
-    assert.equal(product.props.price, 10);
+    assert.equal(product.name, "Widget");
+    assert.equal(product.price, 10);
   });
 
   it("should be equal to another entity with the same id", () => {

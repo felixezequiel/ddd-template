@@ -6,7 +6,7 @@ export type { DomainEvent } from "./shared/domain/events/DomainEvent.ts";
 
 export { ApplicationService } from "./shared/application/ApplicationService.ts";
 export { DomainEventManager } from "./shared/application/DomainEventManager.ts";
-export type { UseCase, UseCaseResult } from "./shared/application/UseCase.ts";
+export type { UseCase } from "./shared/application/UseCase.ts";
 export type { UnitOfWork } from "./shared/application/UnitOfWork.ts";
 
 export type { RepositoryPort } from "./shared/ports/RepositoryPort.ts";

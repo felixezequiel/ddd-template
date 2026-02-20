@@ -82,6 +82,45 @@ describe("HttpServer", () => {
     assert.equal(responseBody.error, "Something went wrong");
   });
 
+  it("should route GET requests to registered handlers", async () => {
+    server = new HttpServer();
+
+    server.get("/users/:userId", async (_requestBody, params) => {
+      return { statusCode: 200, body: { id: params.userId } };
+    });
+
+    const port = await server.start(TEST_PORT);
+
+    const result = await fetchJson("http://localhost:" + port + "/users/user-123", {
+      method: "GET",
+    });
+
+    assert.equal(result.status, 200);
+    const responseBody = result.body as { id: string };
+    assert.equal(responseBody.id, "user-123");
+  });
+
+  it("should extract route params from POST routes", async () => {
+    server = new HttpServer();
+
+    server.post("/users/:userId/addresses", async (requestBody, params) => {
+      return { statusCode: 201, body: { userId: params.userId, street: requestBody.street } };
+    });
+
+    const port = await server.start(TEST_PORT);
+
+    const result = await fetchJson("http://localhost:" + port + "/users/user-1/addresses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ street: "Rua A" }),
+    });
+
+    assert.equal(result.status, 201);
+    const responseBody = result.body as { userId: string; street: string };
+    assert.equal(responseBody.userId, "user-1");
+    assert.equal(responseBody.street, "Rua A");
+  });
+
   it("should stop the server gracefully", async () => {
     server = new HttpServer();
     const port = await server.start(TEST_PORT);

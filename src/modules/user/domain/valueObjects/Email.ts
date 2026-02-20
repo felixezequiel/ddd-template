@@ -7,6 +7,10 @@ interface EmailProps {
 const MINIMUM_EMAIL_PARTS = 2;
 
 export class Email extends ValueObject<EmailProps> {
+  public get value(): string {
+    return this.props.value;
+  }
+
   constructor(value: string) {
     const parts = value.split("@");
     const localPart = parts[0];

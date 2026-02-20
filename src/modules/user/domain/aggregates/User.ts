@@ -5,6 +5,11 @@ import { AddressRemovedEvent } from "../events/AddressRemovedEvent.ts";
 import { UserCreatedEvent } from "../events/UserCreatedEvent.ts";
 import type { AddressId } from "../identifiers/AddressId.ts";
 import type { Email } from "../valueObjects/Email.ts";
+import type { Street } from "../valueObjects/Street.ts";
+import type { AddressNumber } from "../valueObjects/AddressNumber.ts";
+import type { City } from "../valueObjects/City.ts";
+import type { State } from "../valueObjects/State.ts";
+import type { ZipCode } from "../valueObjects/ZipCode.ts";
 import type { UserId } from "../identifiers/UserId.ts";
 
 interface UserProps {
@@ -15,23 +20,44 @@ interface UserProps {
 export class User extends AggregateRoot<UserId, UserProps> {
   private readonly _addresses: Array<Address> = [];
 
+  public get name(): string {
+    return this.props.name;
+  }
+
+  public get email(): Email {
+    return this.props.email;
+  }
+
   public get addresses(): ReadonlyArray<Address> {
     return [...this._addresses];
   }
 
   public static create(id: UserId, name: string, email: Email): User {
     const user = new User(id, { name, email });
-    user.addDomainEvent(new UserCreatedEvent(id.value, email.props.value));
+    user.addDomainEvent(new UserCreatedEvent(id.value, email.value));
+    return user;
+  }
+
+  public static reconstitute(
+    id: UserId,
+    name: string,
+    email: Email,
+    addresses: ReadonlyArray<Address>,
+  ): User {
+    const user = new User(id, { name, email });
+    for (const address of addresses) {
+      user._addresses.push(address);
+    }
     return user;
   }
 
   public addAddress(
     addressId: AddressId,
-    street: string,
-    number: string,
-    city: string,
-    state: string,
-    zipCode: string,
+    street: Street,
+    number: AddressNumber,
+    city: City,
+    state: State,
+    zipCode: ZipCode,
   ): void {
     const address = Address.create(addressId, street, number, city, state, zipCode);
     this._addresses.push(address);

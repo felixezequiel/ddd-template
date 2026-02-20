@@ -1,13 +1,14 @@
-import { describe, it } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { ApplicationService } from "./ApplicationService.ts";
 import { DomainEventManager } from "./DomainEventManager.ts";
-import type { UnitOfWork } from "./UnitOfWork.ts";
-import type { UseCase, UseCaseResult } from "./UseCase.ts";
+import type { UseCase } from "./UseCase.ts";
 import type { EventPublisherPort } from "../ports/EventPublisherPort.ts";
 import type { DomainEvent } from "../domain/events/DomainEvent.ts";
 import { AggregateRoot } from "../domain/aggregates/AggregateRoot.ts";
 import { Identifier } from "../domain/identifiers/Identifier.ts";
+import { AggregateTracker } from "../infrastructure/persistence/AggregateTracker.ts";
+import { TrackedUnitOfWork } from "../infrastructure/persistence/TrackedUnitOfWork.ts";
 
 class FakeId extends Identifier {}
 
@@ -34,21 +35,21 @@ class FakeAggregate extends AggregateRoot<FakeId, FakeProps> {
   }
 }
 
-class FakeUnitOfWork implements UnitOfWork {
-  public beginCalled = false;
-  public commitCalled = false;
-  public rollbackCalled = false;
+class FakeUnitOfWork extends TrackedUnitOfWork {
+  public onBeginCalled = false;
+  public onCommitCalled = false;
+  public onRollbackCalled = false;
 
-  public async begin(): Promise<void> {
-    this.beginCalled = true;
+  protected async onBegin(): Promise<void> {
+    this.onBeginCalled = true;
   }
 
-  public async commit(): Promise<void> {
-    this.commitCalled = true;
+  protected async onCommit(): Promise<void> {
+    this.onCommitCalled = true;
   }
 
-  public async rollback(): Promise<void> {
-    this.rollbackCalled = true;
+  protected async onRollback(): Promise<void> {
+    this.onRollbackCalled = true;
   }
 }
 
@@ -71,19 +72,29 @@ interface FakeCommand {
 }
 
 class FakeUseCase implements UseCase<FakeCommand, FakeAggregate> {
-  public async execute(command: FakeCommand): Promise<UseCaseResult<FakeAggregate>> {
+  public async execute(command: FakeCommand): Promise<FakeAggregate> {
     const aggregate = FakeAggregate.create(new FakeId("agg-1"), command.name);
-    return { result: aggregate, aggregates: [aggregate] };
+    return aggregate;
   }
 }
 
 class FailingUseCase implements UseCase<FakeCommand, FakeAggregate> {
-  public async execute(): Promise<UseCaseResult<FakeAggregate>> {
+  public async execute(): Promise<FakeAggregate> {
     throw new Error("use case failed");
   }
 }
 
 describe("ApplicationService", () => {
+  beforeEach(() => {
+    AggregateRoot.setOnTrack((aggregate) => {
+      AggregateTracker.track(aggregate);
+    });
+  });
+
+  afterEach(() => {
+    AggregateRoot.setOnTrack(null);
+  });
+
   it("should execute the full cycle: begin, useCase, dispatch, publish, commit", async () => {
     const unitOfWork = new FakeUnitOfWork();
     const eventManager = new DomainEventManager();
@@ -103,9 +114,9 @@ describe("ApplicationService", () => {
 
     const result = await applicationService.execute(useCase, { name: "test" });
 
-    assert.ok(unitOfWork.beginCalled);
-    assert.ok(unitOfWork.commitCalled);
-    assert.ok(!unitOfWork.rollbackCalled);
+    assert.ok(unitOfWork.onBeginCalled);
+    assert.ok(unitOfWork.onCommitCalled);
+    assert.ok(!unitOfWork.onRollbackCalled);
     assert.equal(result.id.value, "agg-1");
     assert.equal(dispatchedEvents.length, 1);
     assert.equal(eventPublisher.publishedEvents.length, 1);
@@ -128,9 +139,9 @@ describe("ApplicationService", () => {
       { message: "use case failed" },
     );
 
-    assert.ok(unitOfWork.beginCalled);
-    assert.ok(!unitOfWork.commitCalled);
-    assert.ok(unitOfWork.rollbackCalled);
+    assert.ok(unitOfWork.onBeginCalled);
+    assert.ok(!unitOfWork.onCommitCalled);
+    assert.ok(unitOfWork.onRollbackCalled);
   });
 
   it("should rollback when event dispatch fails", async () => {
@@ -154,20 +165,20 @@ describe("ApplicationService", () => {
       { message: "handler failed" },
     );
 
-    assert.ok(unitOfWork.rollbackCalled);
-    assert.ok(!unitOfWork.commitCalled);
+    assert.ok(unitOfWork.onRollbackCalled);
+    assert.ok(!unitOfWork.onCommitCalled);
   });
 
-  it("should drain events from all aggregates returned by the use case", async () => {
+  it("should drain events from all tracked aggregates", async () => {
     const unitOfWork = new FakeUnitOfWork();
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
 
     class MultiAggregateUseCase implements UseCase<FakeCommand, FakeAggregate> {
-      public async execute(command: FakeCommand): Promise<UseCaseResult<FakeAggregate>> {
+      public async execute(command: FakeCommand): Promise<FakeAggregate> {
         const firstAggregate = FakeAggregate.create(new FakeId("agg-1"), command.name);
-        const secondAggregate = FakeAggregate.create(new FakeId("agg-2"), command.name);
-        return { result: firstAggregate, aggregates: [firstAggregate, secondAggregate] };
+        FakeAggregate.create(new FakeId("agg-2"), command.name);
+        return firstAggregate;
       }
     }
 

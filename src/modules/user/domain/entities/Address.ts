@@ -1,39 +1,60 @@
 import { Entity } from "../../../../shared/domain/entities/Entity.ts";
 import type { AddressId } from "../identifiers/AddressId.ts";
+import type { Street } from "../valueObjects/Street.ts";
+import type { AddressNumber } from "../valueObjects/AddressNumber.ts";
+import type { City } from "../valueObjects/City.ts";
+import type { State } from "../valueObjects/State.ts";
+import type { ZipCode } from "../valueObjects/ZipCode.ts";
+
 
 interface AddressProps {
-  readonly street: string;
-  readonly number: string;
-  readonly city: string;
-  readonly state: string;
-  readonly zipCode: string;
+  readonly street: Street;
+  readonly number: AddressNumber;
+  readonly city: City;
+  readonly state: State;
+  readonly zipCode: ZipCode;
 }
 
 export class Address extends Entity<AddressId, AddressProps> {
+  public get street(): Street {
+    return this.props.street;
+  }
+
+  public get number(): AddressNumber {
+    return this.props.number;
+  }
+
+  public get city(): City {
+    return this.props.city;
+  }
+
+  public get state(): State {
+    return this.props.state;
+  }
+
+  public get zipCode(): ZipCode {
+    return this.props.zipCode;
+  }
+
   public static create(
     id: AddressId,
-    street: string,
-    number: string,
-    city: string,
-    state: string,
-    zipCode: string,
+    street: Street,
+    number: AddressNumber,
+    city: City,
+    state: State,
+    zipCode: ZipCode,
   ): Address {
-    if (street.length === 0) {
-      throw new Error("Street cannot be empty");
-    }
+    return new Address(id, { street, number, city, state, zipCode });
+  }
 
-    if (city.length === 0) {
-      throw new Error("City cannot be empty");
-    }
-
-    if (state.length === 0) {
-      throw new Error("State cannot be empty");
-    }
-
-    if (zipCode.length === 0) {
-      throw new Error("ZipCode cannot be empty");
-    }
-
+  public static reconstitute(
+    id: AddressId,
+    street: Street,
+    number: AddressNumber,
+    city: City,
+    state: State,
+    zipCode: ZipCode,
+  ): Address {
     return new Address(id, { street, number, city, state, zipCode });
   }
 }

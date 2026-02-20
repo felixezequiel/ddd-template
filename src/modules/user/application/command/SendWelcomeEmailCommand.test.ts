@@ -7,7 +7,7 @@ describe("SendWelcomeEmailCommand", () => {
     const command = SendWelcomeEmailCommand.of("user-123", "john@example.com");
 
     assert.equal(command.userId.value, "user-123");
-    assert.equal(command.email.props.value, "john@example.com");
+    assert.equal(command.email.value, "john@example.com");
   });
 
   it("should reject an invalid email format", () => {

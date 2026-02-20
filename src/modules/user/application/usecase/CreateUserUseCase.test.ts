@@ -19,7 +19,7 @@ class InMemoryUserRepository implements UserRepositoryPort {
   }
 
   public async findByEmail(email: string): Promise<User | null> {
-    const found = this.users.find((user) => user.props.email.props.value === email);
+    const found = this.users.find((user) => user.email.value === email);
     return found ?? null;
   }
 
@@ -29,29 +29,27 @@ class InMemoryUserRepository implements UserRepositoryPort {
 }
 
 describe("CreateUserUseCase", () => {
-  it("should create a user and save it to the repository", async () => {
+  it("should create a user and return it as the result", async () => {
     const repository = new InMemoryUserRepository();
     const useCase = new CreateUserUseCase(repository);
     const command = CreateUserCommand.of("user-1", "John Doe", "john@example.com");
 
-    const result = await useCase.execute(command);
+    const user = await useCase.execute(command);
 
-    assert.equal(result.result.id.value, "user-1");
-    assert.equal(result.result.props.name, "John Doe");
-
-    const savedUser = await repository.findById(result.result.id);
-    assert.ok(savedUser !== null);
+    assert.equal(user.id.value, "user-1");
+    assert.equal(user.name, "John Doe");
   });
 
-  it("should return the created user as an aggregate in the result", async () => {
+  it("should emit a UserCreatedEvent on the created aggregate", async () => {
     const repository = new InMemoryUserRepository();
     const useCase = new CreateUserUseCase(repository);
     const command = CreateUserCommand.of("user-1", "John Doe", "john@example.com");
 
-    const result = await useCase.execute(command);
+    const user = await useCase.execute(command);
 
-    assert.equal(result.aggregates.length, 1);
-    assert.equal(result.aggregates[0]!.id.value, "user-1");
+    const events = user.getDomainEvents();
+    assert.equal(events.length, 1);
+    assert.equal(events[0]!.eventName, "UserCreated");
   });
 
   it("should throw when a user with the same email already exists", async () => {
@@ -59,7 +57,8 @@ describe("CreateUserUseCase", () => {
     const useCase = new CreateUserUseCase(repository);
 
     const firstCommand = CreateUserCommand.of("user-1", "John", "john@example.com");
-    await useCase.execute(firstCommand);
+    const firstUser = await useCase.execute(firstCommand);
+    await repository.save(firstUser);
 
     const duplicateCommand = CreateUserCommand.of("user-2", "Jane", "john@example.com");
 

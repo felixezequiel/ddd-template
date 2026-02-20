@@ -11,11 +11,22 @@ export interface HttpResponse {
   readonly body: unknown;
 }
 
-export type RouteHandler = (requestBody: Record<string, unknown>) => Promise<HttpResponse>;
+export type RouteParams = Record<string, string>;
+
+export type RouteHandler = (requestBody: Record<string, unknown>, params: RouteParams) => Promise<HttpResponse>;
+
+interface RouteMatch {
+  readonly route: HttpRoute;
+  readonly params: RouteParams;
+}
 
 export class HttpServer {
   private readonly routes: Array<HttpRoute> = [];
   private server: Server | undefined;
+
+  public get(path: string, handler: RouteHandler): void {
+    this.routes.push({ method: "GET", path, handler });
+  }
 
   public post(path: string, handler: RouteHandler): void {
     this.routes.push({ method: "POST", path, handler });
@@ -56,15 +67,15 @@ export class HttpServer {
   }
 
   private handleRequest(request: IncomingMessage, response: ServerResponse): void {
-    const route = this.findRoute(request.method, request.url);
+    const match = this.matchRoute(request.method, request.url);
 
-    if (route === undefined) {
+    if (match === undefined) {
       this.sendJson(response, 404, { error: "Not Found" });
       return;
     }
 
     this.readBody(request).then((body) => {
-      return route.handler(body);
+      return match.route.handler(body, match.params);
     }).then((result) => {
       this.sendJson(response, result.statusCode, result.body);
     }).catch((error: Error) => {
@@ -72,13 +83,49 @@ export class HttpServer {
     });
   }
 
-  private findRoute(method: string | undefined, url: string | undefined): HttpRoute | undefined {
+  private matchRoute(method: string | undefined, url: string | undefined): RouteMatch | undefined {
+    if (method === undefined || url === undefined) {
+      return undefined;
+    }
+
     for (const route of this.routes) {
-      if (route.method === method && route.path === url) {
-        return route;
+      if (route.method !== method) {
+        continue;
+      }
+
+      const params = this.extractParams(route.path, url);
+      if (params !== null) {
+        return { route, params };
       }
     }
+
     return undefined;
+  }
+
+  private extractParams(routePath: string, requestUrl: string): RouteParams | null {
+    const routeSegments = routePath.split("/");
+    const urlSegments = requestUrl.split("/");
+
+    if (routeSegments.length !== urlSegments.length) {
+      return null;
+    }
+
+    const params: Record<string, string> = {};
+
+    for (let segmentIndex = 0; segmentIndex < routeSegments.length; segmentIndex++) {
+      const routeSegment = routeSegments[segmentIndex]!;
+      const urlSegment = urlSegments[segmentIndex]!;
+
+      const isParam = routeSegment.startsWith(":");
+      if (isParam) {
+        const paramName = routeSegment.substring(1);
+        params[paramName] = urlSegment;
+      } else if (routeSegment !== urlSegment) {
+        return null;
+      }
+    }
+
+    return params;
   }
 
   private readBody(request: IncomingMessage): Promise<Record<string, unknown>> {

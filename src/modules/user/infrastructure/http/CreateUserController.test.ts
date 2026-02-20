@@ -1,19 +1,15 @@
-import { describe, it } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { CreateUserController } from "./CreateUserController.ts";
 import { ApplicationService } from "../../../../shared/application/ApplicationService.ts";
 import { DomainEventManager } from "../../../../shared/application/DomainEventManager.ts";
-import type { UnitOfWork } from "../../../../shared/application/UnitOfWork.ts";
 import type { EventPublisherPort } from "../../../../shared/ports/EventPublisherPort.ts";
-import type { DomainEvent } from "../../../../shared/domain/events/DomainEvent.ts";
 import { CreateUserUseCase } from "../../application/usecase/CreateUserUseCase.ts";
-import { InMemoryUserRepository } from "../persistence/InMemoryUserRepository.ts";
-
-class FakeUnitOfWork implements UnitOfWork {
-  public async begin(): Promise<void> {}
-  public async commit(): Promise<void> {}
-  public async rollback(): Promise<void> {}
-}
+import { InMemoryUserRepository } from "../persistence/in-memory/InMemoryUserRepository.ts";
+import { InMemoryUnitOfWork } from "../../../../shared/infrastructure/persistence/adapters/InMemoryUnitOfWork.ts";
+import { AggregateRoot } from "../../../../shared/domain/aggregates/AggregateRoot.ts";
+import { AggregateTracker } from "../../../../shared/infrastructure/persistence/AggregateTracker.ts";
+import { User } from "../../domain/aggregates/User.ts";
 
 class FakeEventPublisher implements EventPublisherPort {
   public async publish(): Promise<void> {}
@@ -22,7 +18,12 @@ class FakeEventPublisher implements EventPublisherPort {
 
 function createTestDependencies() {
   const userRepository = new InMemoryUserRepository();
-  const unitOfWork = new FakeUnitOfWork();
+  const unitOfWork = new InMemoryUnitOfWork([
+    {
+      supports: (aggregate) => aggregate instanceof User,
+      save: (aggregate) => userRepository.save(aggregate as User),
+    },
+  ]);
   const eventManager = new DomainEventManager();
   const eventPublisher = new FakeEventPublisher();
   const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
@@ -33,6 +34,16 @@ function createTestDependencies() {
 }
 
 describe("CreateUserController", () => {
+  beforeEach(() => {
+    AggregateRoot.setOnTrack((aggregate) => {
+      AggregateTracker.track(aggregate);
+    });
+  });
+
+  afterEach(() => {
+    AggregateRoot.setOnTrack(null);
+  });
+
   it("should return 201 with created user data", async () => {
     const { controller } = createTestDependencies();
 

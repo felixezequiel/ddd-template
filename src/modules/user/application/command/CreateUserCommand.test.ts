@@ -8,7 +8,7 @@ describe("CreateUserCommand", () => {
 
     assert.equal(command.userId.value, "user-1");
     assert.equal(command.name, "John Doe");
-    assert.equal(command.email.props.value, "john@example.com");
+    assert.equal(command.email.value, "john@example.com");
   });
 
   it("should throw when email is invalid", () => {

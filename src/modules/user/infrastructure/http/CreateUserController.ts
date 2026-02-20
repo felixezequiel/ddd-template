@@ -37,8 +37,8 @@ export class CreateUserController {
         statusCode: HTTP_CREATED,
         body: {
           id: user.id.value,
-          name: user.props.name,
-          email: user.props.email.props.value,
+          name: user.name,
+          email: user.email.value,
         },
       };
     } catch (error) {

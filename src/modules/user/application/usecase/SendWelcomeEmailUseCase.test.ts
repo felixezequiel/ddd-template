@@ -18,13 +18,11 @@ describe("SendWelcomeEmailUseCase", () => {
     const useCase = new SendWelcomeEmailUseCase(fakeEmailNotification);
     const command = SendWelcomeEmailCommand.of("user-123", "john@example.com");
 
-    const result = await useCase.execute(command);
+    await useCase.execute(command);
 
     assert.equal(fakeEmailNotification.sentEmails.length, 1);
     assert.equal(fakeEmailNotification.sentEmails[0]!.email, "john@example.com");
     assert.equal(fakeEmailNotification.sentEmails[0]!.userId, "user-123");
-    assert.equal(result.result, undefined);
-    assert.equal(result.aggregates.length, 0);
   });
 
   it("should propagate errors from the notification port", async () => {

@@ -1,5 +1,5 @@
 export abstract class ValueObject<Props extends object> {
-  public readonly props!: Props;
+  protected readonly props!: Props;
 
   constructor(props: Props) {
     const frozenProps = Object.freeze({ ...props });

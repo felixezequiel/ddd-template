@@ -2,7 +2,7 @@ import type { Identifier } from "../identifiers/Identifier.ts";
 
 export abstract class Entity<Id extends Identifier, Props extends object> {
   public readonly id: Id;
-  public readonly props: Props;
+  protected readonly props: Props;
 
   constructor(id: Id, props: Props) {
     this.id = id;

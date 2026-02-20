@@ -1,18 +1,12 @@
 import { Bench } from "tinybench";
 import { ApplicationService } from "../../../shared/application/ApplicationService.ts";
 import { DomainEventManager } from "../../../shared/application/DomainEventManager.ts";
-import type { UnitOfWork } from "../../../shared/application/UnitOfWork.ts";
 import type { EventPublisherPort } from "../../../shared/ports/EventPublisherPort.ts";
 import type { DomainEvent } from "../../../shared/domain/events/DomainEvent.ts";
+import { NoOpUnitOfWork } from "../../../shared/infrastructure/persistence/adapters/NoOpUnitOfWork.ts";
 import { CreateUserUseCase } from "../application/usecase/CreateUserUseCase.ts";
 import { CreateUserCommand } from "../application/command/CreateUserCommand.ts";
-import { InMemoryUserRepository } from "../infrastructure/persistence/InMemoryUserRepository.ts";
-
-class NoOpUnitOfWork implements UnitOfWork {
-  public async begin(): Promise<void> {}
-  public async commit(): Promise<void> {}
-  public async rollback(): Promise<void> {}
-}
+import { InMemoryUserRepository } from "../infrastructure/persistence/in-memory/InMemoryUserRepository.ts";
 
 class CountingEventPublisher implements EventPublisherPort {
   public publishedCount = 0;

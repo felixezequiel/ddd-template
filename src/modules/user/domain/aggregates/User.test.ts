@@ -4,6 +4,12 @@ import { User } from "./User.ts";
 import { UserId } from "../identifiers/UserId.ts";
 import { Email } from "../valueObjects/Email.ts";
 import { AddressId } from "../identifiers/AddressId.ts";
+import { Address } from "../entities/Address.ts";
+import { Street } from "../valueObjects/Street.ts";
+import { AddressNumber } from "../valueObjects/AddressNumber.ts";
+import { City } from "../valueObjects/City.ts";
+import { State } from "../valueObjects/State.ts";
+import { ZipCode } from "../valueObjects/ZipCode.ts";
 
 describe("User", () => {
   it("should create a user with id, name, and email", () => {
@@ -13,8 +19,8 @@ describe("User", () => {
     const user = User.create(userId, "John Doe", email);
 
     assert.equal(user.id.value, "user-1");
-    assert.equal(user.props.name, "John Doe");
-    assert.ok(user.props.email.equals(email));
+    assert.equal(user.name, "John Doe");
+    assert.ok(user.email.equals(email));
   });
 
   it("should emit UserCreatedEvent when created", () => {
@@ -69,11 +75,18 @@ describe("User", () => {
     const user = User.create(new UserId("user-1"), "John", new Email("john@example.com"));
     const addressId = new AddressId("addr-1");
 
-    user.addAddress(addressId, "Rua das Flores", "123", "Sao Paulo", "SP", "01000-000");
+    user.addAddress(
+      addressId,
+      new Street("Rua das Flores"),
+      new AddressNumber("123"),
+      new City("Sao Paulo"),
+      new State("SP"),
+      new ZipCode("01000-000"),
+    );
 
     assert.equal(user.addresses.length, 1);
     assert.equal(user.addresses[0]!.id.value, "addr-1");
-    assert.equal(user.addresses[0]!.props.street, "Rua das Flores");
+    assert.equal(user.addresses[0]!.street.value, "Rua das Flores");
 
     const events = user.getDomainEvents();
     const addressAddedEvent = events[events.length - 1]!;
@@ -83,7 +96,14 @@ describe("User", () => {
   it("should remove an address by id and emit AddressRemovedEvent", () => {
     const user = User.create(new UserId("user-1"), "John", new Email("john@example.com"));
     const addressId = new AddressId("addr-1");
-    user.addAddress(addressId, "Rua das Flores", "123", "Sao Paulo", "SP", "01000-000");
+    user.addAddress(
+      addressId,
+      new Street("Rua das Flores"),
+      new AddressNumber("123"),
+      new City("Sao Paulo"),
+      new State("SP"),
+      new ZipCode("01000-000"),
+    );
 
     user.removeAddress(addressId);
 
@@ -109,8 +129,22 @@ describe("User", () => {
     const firstAddressId = new AddressId("addr-1");
     const secondAddressId = new AddressId("addr-2");
 
-    user.addAddress(firstAddressId, "Rua A", "1", "Sao Paulo", "SP", "01000-000");
-    user.addAddress(secondAddressId, "Rua B", "2", "Rio de Janeiro", "RJ", "20000-000");
+    user.addAddress(
+      firstAddressId,
+      new Street("Rua A"),
+      new AddressNumber("1"),
+      new City("Sao Paulo"),
+      new State("SP"),
+      new ZipCode("01000-000"),
+    );
+    user.addAddress(
+      secondAddressId,
+      new Street("Rua B"),
+      new AddressNumber("2"),
+      new City("Rio de Janeiro"),
+      new State("RJ"),
+      new ZipCode("20000-000"),
+    );
 
     assert.equal(user.addresses.length, 2);
 
@@ -118,5 +152,39 @@ describe("User", () => {
 
     assert.equal(user.addresses.length, 1);
     assert.equal(user.addresses[0]!.id.value, "addr-2");
+  });
+
+  it("should reconstitute a user without emitting domain events", () => {
+    const userId = new UserId("user-1");
+    const email = new Email("john@example.com");
+    const addresses = [
+      Address.create(
+        new AddressId("addr-1"),
+        new Street("Rua A"),
+        new AddressNumber("1"),
+        new City("Sao Paulo"),
+        new State("SP"),
+        new ZipCode("01000-000"),
+      ),
+    ];
+
+    const user = User.reconstitute(userId, "John Doe", email, addresses);
+
+    assert.equal(user.id.value, "user-1");
+    assert.equal(user.name, "John Doe");
+    assert.ok(user.email.equals(email));
+    assert.equal(user.addresses.length, 1);
+    assert.equal(user.addresses[0]!.id.value, "addr-1");
+    assert.equal(user.getDomainEvents().length, 0);
+  });
+
+  it("should reconstitute a user with an empty address list", () => {
+    const userId = new UserId("user-1");
+    const email = new Email("john@example.com");
+
+    const user = User.reconstitute(userId, "John Doe", email, []);
+
+    assert.equal(user.addresses.length, 0);
+    assert.equal(user.getDomainEvents().length, 0);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { InMemoryUnitOfWork } from "./InMemoryUnitOfWork.ts";
 import { AggregateTracker } from "../AggregateTracker.ts";
 import { AggregateRoot } from "../../../domain/aggregates/AggregateRoot.ts";
@@ -14,12 +15,16 @@ interface FakeProps {
 }
 
 class FakeCreatedEvent implements DomainEvent {
+  public readonly eventId: string;
   public readonly eventName = "FakeCreated";
   public readonly occurredAt = new Date();
   public readonly aggregateId: string;
+  public readonly causationId: string | null;
 
   constructor(aggregateId: string) {
+    this.eventId = randomUUID();
     this.aggregateId = aggregateId;
+    this.causationId = null;
   }
 }
 

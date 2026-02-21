@@ -26,6 +26,10 @@ export class GraphqlServer {
   private schema: GraphQLSchema | undefined;
   private server: Server | undefined;
 
+  public get schemaFragmentCount(): number {
+    return this.schemaFragments.length;
+  }
+
   constructor(schemaSource?: string, resolvers?: ResolverMap) {
     if (schemaSource !== undefined) {
       this.schema = buildSchema(schemaSource);

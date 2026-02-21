@@ -1,29 +1,38 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { EventEmitterEventBus } from "./EventEmitterEventBus.ts";
 import type { DomainEvent } from "../../domain/events/DomainEvent.ts";
 
 class FakeUserCreatedEvent implements DomainEvent {
+  public readonly eventId: string;
   public readonly eventName = "UserCreated";
   public readonly occurredAt: Date;
   public readonly aggregateId: string;
+  public readonly causationId: string | null;
   public readonly email: string;
 
   constructor(aggregateId: string, email: string) {
+    this.eventId = randomUUID();
     this.aggregateId = aggregateId;
     this.email = email;
     this.occurredAt = new Date();
+    this.causationId = null;
   }
 }
 
 class FakeAddressAddedEvent implements DomainEvent {
+  public readonly eventId: string;
   public readonly eventName = "AddressAdded";
   public readonly occurredAt: Date;
   public readonly aggregateId: string;
+  public readonly causationId: string | null;
 
   constructor(aggregateId: string) {
+    this.eventId = randomUUID();
     this.aggregateId = aggregateId;
     this.occurredAt = new Date();
+    this.causationId = null;
   }
 }
 

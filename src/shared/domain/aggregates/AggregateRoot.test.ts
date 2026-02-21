@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { AggregateRoot } from "./AggregateRoot.ts";
 import { Identifier } from "../identifiers/Identifier.ts";
 import type { DomainEvent } from "../events/DomainEvent.ts";
@@ -12,24 +13,32 @@ interface OrderProps {
 }
 
 class OrderCreatedEvent implements DomainEvent {
+  public readonly eventId: string;
   public readonly eventName = "OrderCreated";
   public readonly occurredAt: Date;
   public readonly aggregateId: string;
+  public readonly causationId: string | null;
 
   constructor(aggregateId: string) {
+    this.eventId = randomUUID();
     this.aggregateId = aggregateId;
     this.occurredAt = new Date();
+    this.causationId = null;
   }
 }
 
 class OrderShippedEvent implements DomainEvent {
+  public readonly eventId: string;
   public readonly eventName = "OrderShipped";
   public readonly occurredAt: Date;
   public readonly aggregateId: string;
+  public readonly causationId: string | null;
 
   constructor(aggregateId: string) {
+    this.eventId = randomUUID();
     this.aggregateId = aggregateId;
     this.occurredAt = new Date();
+    this.causationId = null;
   }
 }
 

@@ -48,12 +48,14 @@ Dependencies point inward: infrastructure -> application -> domain. Domain never
 | **ValueObject\<Props\>** | Immutable via `Object.defineProperty`. Protected props with public getters. Equality by value |
 | **Entity\<Id, Props\>** | Has identity + protected props with public getters. Equality by ID |
 | **AggregateRoot\<Id, Props\>** | Extends Entity. Auto-tracks via `setOnTrack()` callback. Supports `reconstitute()` for persistence hydration |
-| **DomainEvent** | Immutable fact that happened in the domain |
+| **DomainEvent** | Immutable fact with `eventId`, `eventName`, `aggregateId`, `causationId` for full traceability |
 | **UseCase** | Returns `Promise<T>` directly — no wrapper types |
-| **ApplicationService** | Orchestrates: begin -> execute -> drain events -> dispatch -> publish -> commit |
+| **ApplicationService** | Orchestrates: begin -> execute -> drain events -> dispatch -> publish -> saveAll(eventStore) -> commit |
 | **Command** | Private constructor + static `of()` factory receiving primitives |
 | **TrackedUnitOfWork** | Abstract UoW with automatic aggregate tracking via `AsyncLocalStorage` |
 | **AggregatePersister** | Per-module strategy to persist tracked aggregates on commit |
+| **EventStorePort** | Persists all domain events for audit trail and event sourcing |
+| **EventEmittingAdapter** | Base class for infrastructure adapters that emit domain events |
 
 ## Automatic Aggregate Tracking
 
@@ -265,6 +267,7 @@ Architecture Decision Records are in `src/context/docs/`:
 - [003 - Domain Event Dispatch](src/context/docs/003-domain-event-dispatch.md)
 - [004 - Unit of Work Pattern](src/context/docs/004-unit-of-work-pattern.md)
 - [005 - Application Service Orchestration](src/context/docs/005-application-service-orchestration.md)
+- [006 - Event Store and Real-World Patterns](src/context/docs/006-event-store-and-real-world-patterns.md)
 
 ## License
 

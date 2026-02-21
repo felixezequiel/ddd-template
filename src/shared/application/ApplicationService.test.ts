@@ -1,13 +1,16 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { ApplicationService } from "./ApplicationService.ts";
 import { DomainEventManager } from "./DomainEventManager.ts";
 import type { UseCase } from "./UseCase.ts";
 import type { EventPublisherPort } from "../ports/EventPublisherPort.ts";
+import type { EventStorePort } from "../ports/EventStorePort.ts";
 import type { DomainEvent } from "../domain/events/DomainEvent.ts";
 import { AggregateRoot } from "../domain/aggregates/AggregateRoot.ts";
 import { Identifier } from "../domain/identifiers/Identifier.ts";
 import { AggregateTracker } from "../infrastructure/persistence/AggregateTracker.ts";
+import { EventEmittingAdapter } from "../infrastructure/adapters/EventEmittingAdapter.ts";
 import { TrackedUnitOfWork } from "../infrastructure/persistence/TrackedUnitOfWork.ts";
 
 class FakeId extends Identifier {}
@@ -17,13 +20,17 @@ interface FakeProps {
 }
 
 class FakeCreatedEvent implements DomainEvent {
+  public readonly eventId: string;
   public readonly eventName = "FakeCreated";
   public readonly occurredAt: Date;
   public readonly aggregateId: string;
+  public readonly causationId: string | null;
 
   constructor(aggregateId: string) {
+    this.eventId = randomUUID();
     this.aggregateId = aggregateId;
     this.occurredAt = new Date();
+    this.causationId = null;
   }
 }
 
@@ -67,6 +74,20 @@ class FakeEventPublisher implements EventPublisherPort {
   }
 }
 
+class FakeEventStore implements EventStorePort {
+  public savedEvents: Array<DomainEvent> = [];
+  public shouldFail = false;
+
+  public async saveAll(events: ReadonlyArray<DomainEvent>): Promise<void> {
+    if (this.shouldFail) {
+      throw new Error("event store failed");
+    }
+    for (const event of events) {
+      this.savedEvents.push(event);
+    }
+  }
+}
+
 interface FakeCommand {
   readonly name: string;
 }
@@ -75,6 +96,27 @@ class FakeUseCase implements UseCase<FakeCommand, FakeAggregate> {
   public async execute(command: FakeCommand): Promise<FakeAggregate> {
     const aggregate = FakeAggregate.create(new FakeId("agg-1"), command.name);
     return aggregate;
+  }
+}
+
+class FakeAdapterEvent implements DomainEvent {
+  public readonly eventId: string;
+  public readonly eventName = "FakeAdapterEvent";
+  public readonly occurredAt: Date;
+  public readonly aggregateId: string;
+  public readonly causationId: string | null;
+
+  constructor(aggregateId: string) {
+    this.eventId = randomUUID();
+    this.aggregateId = aggregateId;
+    this.occurredAt = new Date();
+    this.causationId = null;
+  }
+}
+
+class FakeAdapter extends EventEmittingAdapter {
+  public emitEvent(event: DomainEvent): void {
+    this.addDomainEvent(event);
   }
 }
 
@@ -89,16 +131,21 @@ describe("ApplicationService", () => {
     AggregateRoot.setOnTrack((aggregate) => {
       AggregateTracker.track(aggregate);
     });
+    EventEmittingAdapter.setOnTrack((source) => {
+      AggregateTracker.track(source);
+    });
   });
 
   afterEach(() => {
     AggregateRoot.setOnTrack(null);
+    EventEmittingAdapter.setOnTrack(null);
   });
 
   it("should execute the full cycle: begin, useCase, dispatch, publish, commit", async () => {
     const unitOfWork = new FakeUnitOfWork();
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
+    const eventStore = new FakeEventStore();
     const useCase = new FakeUseCase();
     const dispatchedEvents: Array<DomainEvent> = [];
 
@@ -110,6 +157,7 @@ describe("ApplicationService", () => {
       unitOfWork,
       eventManager,
       eventPublisher,
+      eventStore,
     );
 
     const result = await applicationService.execute(useCase, { name: "test" });
@@ -126,12 +174,14 @@ describe("ApplicationService", () => {
     const unitOfWork = new FakeUnitOfWork();
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
+    const eventStore = new FakeEventStore();
     const failingUseCase = new FailingUseCase();
 
     const applicationService = new ApplicationService(
       unitOfWork,
       eventManager,
       eventPublisher,
+      eventStore,
     );
 
     await assert.rejects(
@@ -148,6 +198,7 @@ describe("ApplicationService", () => {
     const unitOfWork = new FakeUnitOfWork();
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
+    const eventStore = new FakeEventStore();
     const useCase = new FakeUseCase();
 
     eventManager.register("FakeCreated", async () => {
@@ -158,6 +209,7 @@ describe("ApplicationService", () => {
       unitOfWork,
       eventManager,
       eventPublisher,
+      eventStore,
     );
 
     await assert.rejects(
@@ -173,6 +225,7 @@ describe("ApplicationService", () => {
     const unitOfWork = new FakeUnitOfWork();
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
+    const eventStore = new FakeEventStore();
 
     class MultiAggregateUseCase implements UseCase<FakeCommand, FakeAggregate> {
       public async execute(command: FakeCommand): Promise<FakeAggregate> {
@@ -186,10 +239,92 @@ describe("ApplicationService", () => {
       unitOfWork,
       eventManager,
       eventPublisher,
+      eventStore,
     );
 
     await applicationService.execute(new MultiAggregateUseCase(), { name: "test" });
 
     assert.equal(eventPublisher.publishedEvents.length, 2);
+  });
+
+  it("should persist events via event store before commit", async () => {
+    const unitOfWork = new FakeUnitOfWork();
+    const eventManager = new DomainEventManager();
+    const eventPublisher = new FakeEventPublisher();
+    const eventStore = new FakeEventStore();
+    const useCase = new FakeUseCase();
+
+    const applicationService = new ApplicationService(
+      unitOfWork,
+      eventManager,
+      eventPublisher,
+      eventStore,
+    );
+
+    await applicationService.execute(useCase, { name: "test" });
+
+    assert.equal(eventStore.savedEvents.length, 1);
+    assert.equal(eventStore.savedEvents[0]!.eventName, "FakeCreated");
+    assert.equal(eventStore.savedEvents[0]!.aggregateId, "agg-1");
+    assert.ok(unitOfWork.onCommitCalled);
+  });
+
+  it("should drain events from both aggregates and adapters", async () => {
+    const unitOfWork = new FakeUnitOfWork();
+    const eventManager = new DomainEventManager();
+    const eventPublisher = new FakeEventPublisher();
+    const eventStore = new FakeEventStore();
+
+    const fakeAdapter = new FakeAdapter();
+
+    class UseCaseWithAdapter implements UseCase<FakeCommand, FakeAggregate> {
+      public async execute(command: FakeCommand): Promise<FakeAggregate> {
+        const aggregate = FakeAggregate.create(new FakeId("agg-1"), command.name);
+        fakeAdapter.emitEvent(new FakeAdapterEvent("adapter-1"));
+        return aggregate;
+      }
+    }
+
+    const applicationService = new ApplicationService(
+      unitOfWork,
+      eventManager,
+      eventPublisher,
+      eventStore,
+    );
+
+    await applicationService.execute(new UseCaseWithAdapter(), { name: "test" });
+
+    assert.equal(eventPublisher.publishedEvents.length, 2);
+
+    const eventNames: Array<string> = [];
+    for (const event of eventPublisher.publishedEvents) {
+      eventNames.push(event.eventName);
+    }
+    assert.ok(eventNames.includes("FakeCreated"));
+    assert.ok(eventNames.includes("FakeAdapterEvent"));
+  });
+
+  it("should rollback when event store fails", async () => {
+    const unitOfWork = new FakeUnitOfWork();
+    const eventManager = new DomainEventManager();
+    const eventPublisher = new FakeEventPublisher();
+    const eventStore = new FakeEventStore();
+    eventStore.shouldFail = true;
+    const useCase = new FakeUseCase();
+
+    const applicationService = new ApplicationService(
+      unitOfWork,
+      eventManager,
+      eventPublisher,
+      eventStore,
+    );
+
+    await assert.rejects(
+      () => applicationService.execute(useCase, { name: "test" }),
+      { message: "event store failed" },
+    );
+
+    assert.ok(unitOfWork.onRollbackCalled);
+    assert.ok(!unitOfWork.onCommitCalled);
   });
 });

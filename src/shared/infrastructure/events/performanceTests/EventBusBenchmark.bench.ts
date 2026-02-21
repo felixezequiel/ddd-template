@@ -1,16 +1,21 @@
+import { randomUUID } from "node:crypto";
 import { Bench } from "tinybench";
 import { EventEmitterEventBus } from "../EventEmitterEventBus.ts";
 import type { DomainEvent } from "../../../domain/events/DomainEvent.ts";
 
 class FakeBenchmarkEvent implements DomainEvent {
+  public readonly eventId: string;
   public readonly eventName: string;
   public readonly occurredAt: Date;
   public readonly aggregateId: string;
+  public readonly causationId: string | null;
 
   constructor(eventName: string, aggregateId: string) {
+    this.eventId = randomUUID();
     this.eventName = eventName;
     this.aggregateId = aggregateId;
     this.occurredAt = new Date();
+    this.causationId = null;
   }
 }
 

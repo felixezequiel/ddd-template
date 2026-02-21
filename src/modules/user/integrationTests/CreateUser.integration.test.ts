@@ -10,6 +10,7 @@ import { InMemoryUnitOfWork } from "../../../shared/infrastructure/persistence/a
 import { CreateUserUseCase } from "../application/usecase/CreateUserUseCase.ts";
 import { CreateUserCommand } from "../application/command/CreateUserCommand.ts";
 import { InMemoryUserRepository } from "../infrastructure/persistence/in-memory/InMemoryUserRepository.ts";
+import { NoOpEventStore } from "../../../shared/infrastructure/persistence/adapters/eventStore/NoOpEventStore.ts";
 import { User } from "../domain/aggregates/User.ts";
 import { UserId } from "../domain/identifiers/UserId.ts";
 
@@ -57,10 +58,12 @@ describe("CreateUser integration", () => {
     });
 
     const useCase = new CreateUserUseCase(userRepository);
+    const eventStore = new NoOpEventStore();
     const applicationService = new ApplicationService(
       unitOfWork,
       eventManager,
       eventPublisher,
+      eventStore,
     );
 
     const command = CreateUserCommand.of("user-1", "John Doe", "john@example.com");
@@ -75,9 +78,13 @@ describe("CreateUser integration", () => {
 
     assert.equal(dispatchedEvents.length, 1);
     assert.equal(dispatchedEvents[0]!.eventName, "UserCreated");
+    assert.equal(typeof dispatchedEvents[0]!.eventId, "string");
+    assert.ok(dispatchedEvents[0]!.eventId.length > 0);
+    assert.equal(dispatchedEvents[0]!.causationId, null);
 
     assert.equal(eventPublisher.publishedEvents.length, 1);
     assert.equal(eventPublisher.publishedEvents[0]!.eventName, "UserCreated");
+    assert.equal(eventPublisher.publishedEvents[0]!.eventId, dispatchedEvents[0]!.eventId);
   });
 
   it("should rollback when creating a user with a duplicate email", async () => {
@@ -87,10 +94,12 @@ describe("CreateUser integration", () => {
     const eventPublisher = new FakeEventPublisher();
 
     const useCase = new CreateUserUseCase(userRepository);
+    const eventStore = new NoOpEventStore();
     const applicationService = new ApplicationService(
       unitOfWork,
       eventManager,
       eventPublisher,
+      eventStore,
     );
 
     const firstCommand = CreateUserCommand.of("user-1", "John", "john@example.com");

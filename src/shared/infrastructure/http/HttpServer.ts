@@ -24,6 +24,10 @@ export class HttpServer {
   private readonly routes: Array<HttpRoute> = [];
   private server: Server | undefined;
 
+  public get routeCount(): number {
+    return this.routes.length;
+  }
+
   public get(path: string, handler: RouteHandler): void {
     this.routes.push({ method: "GET", path, handler });
   }

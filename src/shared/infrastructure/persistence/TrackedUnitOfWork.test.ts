@@ -1,9 +1,11 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { TrackedUnitOfWork } from "./TrackedUnitOfWork.ts";
 import { AggregateTracker } from "./AggregateTracker.ts";
 import { AggregateRoot } from "../../domain/aggregates/AggregateRoot.ts";
 import { Identifier } from "../../domain/identifiers/Identifier.ts";
+import { EventEmittingAdapter } from "../adapters/EventEmittingAdapter.ts";
 import type { DomainEvent } from "../../domain/events/DomainEvent.ts";
 
 class FakeId extends Identifier {}
@@ -13,12 +15,16 @@ interface FakeProps {
 }
 
 class FakeCreatedEvent implements DomainEvent {
+  public readonly eventId: string;
   public readonly eventName = "FakeCreated";
   public readonly occurredAt = new Date();
   public readonly aggregateId: string;
+  public readonly causationId: string | null;
 
   constructor(aggregateId: string) {
+    this.eventId = randomUUID();
     this.aggregateId = aggregateId;
+    this.causationId = null;
   }
 }
 
@@ -27,6 +33,26 @@ class FakeAggregate extends AggregateRoot<FakeId, FakeProps> {
     const aggregate = new FakeAggregate(id, { name });
     aggregate.addDomainEvent(new FakeCreatedEvent(id.value));
     return aggregate;
+  }
+}
+
+class FakeAdapterEvent implements DomainEvent {
+  public readonly eventId: string;
+  public readonly eventName = "FakeAdapterEvent";
+  public readonly occurredAt = new Date();
+  public readonly aggregateId: string;
+  public readonly causationId: string | null;
+
+  constructor(aggregateId: string) {
+    this.eventId = randomUUID();
+    this.aggregateId = aggregateId;
+    this.causationId = null;
+  }
+}
+
+class FakeAdapter extends EventEmittingAdapter {
+  public emitEvent(event: DomainEvent): void {
+    this.addDomainEvent(event);
   }
 }
 
@@ -116,6 +142,73 @@ describe("TrackedUnitOfWork", () => {
     assert.equal(tracked.length, 1);
     assert.equal(tracked[0], aggregate);
 
+    AggregateTracker.drain();
+  });
+
+  it("should return all tracked event sources including adapters", async () => {
+    EventEmittingAdapter.setOnTrack((source) => {
+      AggregateTracker.track(source);
+    });
+
+    const unitOfWork = new SpyUnitOfWork();
+
+    await unitOfWork.begin();
+
+    const aggregate = FakeAggregate.create(new FakeId("agg-1"), "test");
+
+    const adapter = new FakeAdapter();
+    adapter.emitEvent(new FakeAdapterEvent("adapter-1"));
+
+    const allSources = unitOfWork.getTrackedEventSources();
+
+    assert.equal(allSources.length, 2);
+
+    EventEmittingAdapter.setOnTrack(null);
+    AggregateTracker.drain();
+  });
+
+  it("should only pass aggregates to onCommit even when adapters are tracked", async () => {
+    EventEmittingAdapter.setOnTrack((source) => {
+      AggregateTracker.track(source);
+    });
+
+    const unitOfWork = new SpyUnitOfWork();
+
+    await unitOfWork.begin();
+
+    const aggregate = FakeAggregate.create(new FakeId("agg-1"), "test");
+
+    const adapter = new FakeAdapter();
+    adapter.emitEvent(new FakeAdapterEvent("adapter-1"));
+
+    await unitOfWork.commit();
+
+    assert.equal(unitOfWork.onCommitAggregates.length, 1);
+    assert.equal(unitOfWork.onCommitAggregates[0], aggregate);
+
+    EventEmittingAdapter.setOnTrack(null);
+  });
+
+  it("should filter adapters from getTrackedAggregates", async () => {
+    EventEmittingAdapter.setOnTrack((source) => {
+      AggregateTracker.track(source);
+    });
+
+    const unitOfWork = new SpyUnitOfWork();
+
+    await unitOfWork.begin();
+
+    const aggregate = FakeAggregate.create(new FakeId("agg-1"), "test");
+
+    const adapter = new FakeAdapter();
+    adapter.emitEvent(new FakeAdapterEvent("adapter-1"));
+
+    const trackedAggregates = unitOfWork.getTrackedAggregates();
+
+    assert.equal(trackedAggregates.length, 1);
+    assert.equal(trackedAggregates[0], aggregate);
+
+    EventEmittingAdapter.setOnTrack(null);
     AggregateTracker.drain();
   });
 });

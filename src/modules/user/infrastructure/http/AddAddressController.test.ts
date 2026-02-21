@@ -11,6 +11,7 @@ import { InMemoryUserRepository } from "../persistence/in-memory/InMemoryUserRep
 import { InMemoryUnitOfWork } from "../../../../shared/infrastructure/persistence/adapters/InMemoryUnitOfWork.ts";
 import { AggregateRoot } from "../../../../shared/domain/aggregates/AggregateRoot.ts";
 import { AggregateTracker } from "../../../../shared/infrastructure/persistence/AggregateTracker.ts";
+import { NoOpEventStore } from "../../../../shared/infrastructure/persistence/adapters/eventStore/NoOpEventStore.ts";
 import { User } from "../../domain/aggregates/User.ts";
 
 class FakeEventPublisher implements EventPublisherPort {
@@ -28,7 +29,8 @@ function createTestDependencies() {
   ]);
   const eventManager = new DomainEventManager();
   const eventPublisher = new FakeEventPublisher();
-  const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
+  const eventStore = new NoOpEventStore();
+  const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher, eventStore);
   const addAddressUseCase = new AddAddressUseCase(userRepository);
   const createUserUseCase = new CreateUserUseCase(userRepository);
   const controller = new AddAddressController(applicationService, addAddressUseCase);

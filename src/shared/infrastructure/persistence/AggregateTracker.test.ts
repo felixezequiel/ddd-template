@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { AggregateTracker } from "./AggregateTracker.ts";
 import { AggregateRoot } from "../../domain/aggregates/AggregateRoot.ts";
 import { Identifier } from "../../domain/identifiers/Identifier.ts";
+import { EventEmittingAdapter } from "../adapters/EventEmittingAdapter.ts";
+import type { DomainEventEmitter } from "../../domain/events/DomainEventEmitter.ts";
 
 class FakeId extends Identifier {}
 
@@ -11,6 +13,8 @@ interface FakeProps {
 }
 
 class FakeAggregate extends AggregateRoot<FakeId, FakeProps> {}
+
+class FakeAdapter extends EventEmittingAdapter {}
 
 describe("AggregateTracker", () => {
   beforeEach(() => {
@@ -95,8 +99,8 @@ describe("AggregateTracker", () => {
   });
 
   it("should isolate tracking across async contexts", async () => {
-    const firstAggregates: Array<AggregateRoot<Identifier, object>> = [];
-    const secondAggregates: Array<AggregateRoot<Identifier, object>> = [];
+    const firstSources: Array<DomainEventEmitter> = [];
+    const secondSources: Array<DomainEventEmitter> = [];
 
     const firstRequest = AggregateTracker.run(async () => {
       AggregateTracker.begin();
@@ -106,8 +110,8 @@ describe("AggregateTracker", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       const drained = AggregateTracker.drain();
-      for (const agg of drained) {
-        firstAggregates.push(agg);
+      for (const source of drained) {
+        firstSources.push(source);
       }
     });
 
@@ -119,16 +123,16 @@ describe("AggregateTracker", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       const drained = AggregateTracker.drain();
-      for (const agg of drained) {
-        secondAggregates.push(agg);
+      for (const source of drained) {
+        secondSources.push(source);
       }
     });
 
     await Promise.all([firstRequest, secondRequest]);
 
-    assert.equal(firstAggregates.length, 1);
-    assert.equal(secondAggregates.length, 1);
-    assert.notEqual(firstAggregates[0], secondAggregates[0]);
+    assert.equal(firstSources.length, 1);
+    assert.equal(secondSources.length, 1);
+    assert.notEqual(firstSources[0], secondSources[0]);
   });
 
   it("should support nested begin/drain scopes (stack-based)", () => {
@@ -189,5 +193,19 @@ describe("AggregateTracker", () => {
 
     assert.equal(outerDrained.length, 1);
     assert.equal(outerDrained[0], outerAggregate);
+  });
+
+  it("should track an EventEmittingAdapter alongside aggregates", () => {
+    AggregateTracker.begin();
+
+    const aggregate = new FakeAggregate(new FakeId("agg-1"), { name: "test" });
+    const adapter = new FakeAdapter();
+
+    AggregateTracker.track(aggregate);
+    AggregateTracker.track(adapter);
+
+    const drained = AggregateTracker.drain();
+
+    assert.equal(drained.length, 2);
   });
 });

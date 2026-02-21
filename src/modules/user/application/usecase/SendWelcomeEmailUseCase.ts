@@ -13,6 +13,7 @@ export class SendWelcomeEmailUseCase implements SendWelcomeEmailPort {
     await this.emailNotification.sendWelcomeEmail(
       command.email.value,
       command.userId.value,
+      command.causationId,
     );
   }
 }

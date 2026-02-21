@@ -12,6 +12,7 @@ import { InMemoryUserRepository } from "../infrastructure/persistence/in-memory/
 import { InMemoryUnitOfWork } from "../../../shared/infrastructure/persistence/adapters/InMemoryUnitOfWork.ts";
 import { AggregateRoot } from "../../../shared/domain/aggregates/AggregateRoot.ts";
 import { AggregateTracker } from "../../../shared/infrastructure/persistence/AggregateTracker.ts";
+import { NoOpEventStore } from "../../../shared/infrastructure/persistence/adapters/eventStore/NoOpEventStore.ts";
 import { User } from "../domain/aggregates/User.ts";
 
 function createUserRepositoryAdapter(repository: InMemoryUserRepository) {
@@ -71,7 +72,8 @@ describe("UserModule", () => {
     const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
-    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
+    const eventStore = new NoOpEventStore();
+    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher, eventStore);
 
     const userModule = new UserModule(applicationService, userRepository);
     userModule.registerRoutes(httpServer);
@@ -97,7 +99,8 @@ describe("UserModule", () => {
     const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
-    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
+    const eventStore = new NoOpEventStore();
+    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher, eventStore);
 
     const userModule = new UserModule(applicationService, userRepository);
     userModule.registerRoutes(httpServer);
@@ -125,7 +128,8 @@ describe("UserModule", () => {
     const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
-    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
+    const eventStore = new NoOpEventStore();
+    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher, eventStore);
 
     const userModule = new UserModule(applicationService, userRepository);
     userModule.registerResolvers(graphqlServer);
@@ -160,7 +164,8 @@ describe("UserModule", () => {
     const eventManager = new DomainEventManager();
     const eventBus = new EventEmitterEventBus();
     const fakeLogger = new FakeLogger();
-    const applicationService = new ApplicationService(unitOfWork, eventManager, eventBus);
+    const eventStore = new NoOpEventStore();
+    const applicationService = new ApplicationService(unitOfWork, eventManager, eventBus, eventStore);
 
     const userModule = new UserModule(applicationService, userRepository);
     userModule.registerEventHandlers(eventBus, fakeLogger);
@@ -187,7 +192,8 @@ describe("UserModule", () => {
     const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
-    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
+    const eventStore = new NoOpEventStore();
+    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher, eventStore);
 
     const userModule = new UserModule(applicationService, userRepository);
     userModule.registerRoutes(httpServer);
@@ -220,7 +226,8 @@ describe("UserModule", () => {
     const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
-    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
+    const eventStore = new NoOpEventStore();
+    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher, eventStore);
 
     const userModule = new UserModule(applicationService, userRepository);
     userModule.registerRoutes(httpServer);
@@ -255,7 +262,8 @@ describe("UserModule", () => {
     const unitOfWork = new InMemoryUnitOfWork([createUserRepositoryAdapter(userRepository)]);
     const eventManager = new DomainEventManager();
     const eventPublisher = new FakeEventPublisher();
-    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
+    const eventStore = new NoOpEventStore();
+    const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher, eventStore);
 
     const userModule = new UserModule(applicationService, userRepository);
     userModule.registerRoutes(httpServer);

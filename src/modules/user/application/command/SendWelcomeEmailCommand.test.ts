@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { SendWelcomeEmailCommand } from "./SendWelcomeEmailCommand.ts";
 
 describe("SendWelcomeEmailCommand", () => {
@@ -14,5 +15,18 @@ describe("SendWelcomeEmailCommand", () => {
     assert.throws(
       () => SendWelcomeEmailCommand.of("user-123", "invalid-email"),
     );
+  });
+
+  it("should have causationId as null by default", () => {
+    const command = SendWelcomeEmailCommand.of("user-123", "john@example.com");
+
+    assert.equal(command.causationId, null);
+  });
+
+  it("should accept a causationId when provided", () => {
+    const causingEventId = randomUUID();
+    const command = SendWelcomeEmailCommand.of("user-123", "john@example.com", causingEventId);
+
+    assert.equal(command.causationId, causingEventId);
   });
 });

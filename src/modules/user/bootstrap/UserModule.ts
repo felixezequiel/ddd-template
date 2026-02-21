@@ -30,14 +30,14 @@ export class UserModule {
   }
 
   public registerEventHandlers(eventBus: EventEmitterEventBus, logger: LoggerPort): void {
-    const emailNotification = new ConsoleEmailNotification(logger);
-    const sendWelcomeEmailUseCase = new SendWelcomeEmailUseCase(emailNotification);
-
     eventBus.subscribe("UserCreated", async (event) => {
       const userCreatedEvent = event as UserCreatedEvent;
+      const emailNotification = new ConsoleEmailNotification(logger);
+      const sendWelcomeEmailUseCase = new SendWelcomeEmailUseCase(emailNotification);
       const command = SendWelcomeEmailCommand.of(
         userCreatedEvent.aggregateId,
         userCreatedEvent.email,
+        userCreatedEvent.eventId,
       );
       await this.applicationService.execute(sendWelcomeEmailUseCase, command);
     });

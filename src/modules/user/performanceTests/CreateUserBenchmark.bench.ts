@@ -4,6 +4,7 @@ import { DomainEventManager } from "../../../shared/application/DomainEventManag
 import type { EventPublisherPort } from "../../../shared/ports/EventPublisherPort.ts";
 import type { DomainEvent } from "../../../shared/domain/events/DomainEvent.ts";
 import { NoOpUnitOfWork } from "../../../shared/infrastructure/persistence/adapters/NoOpUnitOfWork.ts";
+import { NoOpEventStore } from "../../../shared/infrastructure/persistence/adapters/eventStore/NoOpEventStore.ts";
 import { CreateUserUseCase } from "../application/usecase/CreateUserUseCase.ts";
 import { CreateUserCommand } from "../application/command/CreateUserCommand.ts";
 import { InMemoryUserRepository } from "../infrastructure/persistence/in-memory/InMemoryUserRepository.ts";
@@ -47,7 +48,8 @@ function createInfrastructure(): {
   const unitOfWork = new NoOpUnitOfWork();
   const eventManager = new DomainEventManager();
   const eventPublisher = new CountingEventPublisher();
-  const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher);
+  const eventStore = new NoOpEventStore();
+  const applicationService = new ApplicationService(unitOfWork, eventManager, eventPublisher, eventStore);
 
   return { applicationService, userRepository, eventManager, eventPublisher };
 }
